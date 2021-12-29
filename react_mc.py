@@ -1,7 +1,7 @@
-import pynusmv
-import sys
+import pynusmv  
+import sys 
 from pynusmv_lower_interface.nusmv.parser import parser 
-from collections import deque
+from collections import deque  
 
 specTypes = {'LTLSPEC': parser.TOK_LTLSPEC, 'CONTEXT': parser.CONTEXT,
     'IMPLIES': parser.IMPLIES, 'IFF': parser.IFF, 'OR': parser.OR, 'XOR': parser.XOR, 'XNOR': parser.XNOR,
@@ -16,6 +16,21 @@ specTypes = {'LTLSPEC': parser.TOK_LTLSPEC, 'CONTEXT': parser.CONTEXT,
 basicTypes = {parser.ATOM, parser.NUMBER, parser.TRUEEXP, parser.FALSEEXP, parser.DOT,
               parser.EQUAL, parser.NOTEQUAL, parser.LT, parser.GT, parser.LE, parser.GE}
 booleanOp = {parser.AND, parser.OR, parser.XOR, parser.XNOR, parser.IMPLIES, parser.IFF}
+
+def check_formula(fsm, reach, spec):
+    recur = reach.intersected(spec)
+    
+    
+def get_reach(fsm):
+    #get the set of reacheable states
+    reach = fsm.init
+    new = fsm.init
+    
+    while(not(new.is_false())):
+        new = fsm.post(new).diff(reach)
+        reach = reach.union(new)
+    
+    return reach
 
 def spec_to_bdd(model, spec):
     """
@@ -61,7 +76,7 @@ def parse_react(spec):
     Visit the syntactic tree of the formula `spec` to check if it is a reactive formula,
     that is wether the formula is of the form
     
-                    GF f -> GF g
+                    GF f -> GF g      
     
     where f and g are boolean combination of basic formulas.
     
@@ -87,15 +102,20 @@ def parse_react(spec):
         return None
     return (f_formula, g_formula)
 
-def check_react_spec(spec):
+def check_react_spec(spec, fsm):
     """
     Return whether the loaded SMV model satisfies or not the GR(1) formula
     `spec`, that is, whether all executions of the model satisfies `spec`
-    or not. 
+    or not.
     """
     if parse_react(spec) == None:
         return None
-    return pynusmv.mc.check_explain_ltl_spec(spec)
+
+    notBddSpec = spec_to_bdd(fsm,pynusmv.prop.not_(spec))
+    reach = get_reach(fsm)
+    check_formula(fsm, reach, notBddSpec)
+
+    #return pynusmv.mc.check_explain_ltl_spec(spec)
 
 if len(sys.argv) != 2:
     print("Usage:", sys.argv[0], "filename.smv")
@@ -105,6 +125,7 @@ pynusmv.init.init_nusmv()
 filename = sys.argv[1]
 pynusmv.glob.load_from_file(filename)
 pynusmv.glob.compute_model()
+fsm = pynusmv.glob.prop_database().master.bddFsm
 type_ltl = pynusmv.prop.propTypes['LTL']
 for prop in pynusmv.glob.prop_database():
     spec = prop.expr
@@ -112,7 +133,7 @@ for prop in pynusmv.glob.prop_database():
     if prop.type != type_ltl:
         print("property is not LTLSPEC, skipping")
         continue
-    res = check_react_spec(spec)
+    res = check_react_spec(spec, fsm)
     if res == None:
         print('Property is not a GR(1) formula, skipping')
     if res[0] == True:
