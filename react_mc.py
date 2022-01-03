@@ -7,7 +7,7 @@ specTypes = {'LTLSPEC': parser.TOK_LTLSPEC, 'CONTEXT': parser.CONTEXT,
     'IMPLIES': parser.IMPLIES, 'IFF': parser.IFF, 'OR': parser.OR, 'XOR': parser.XOR, 'XNOR': parser.XNOR,
     'AND': parser.AND, 'NOT': parser.NOT, 'ATOM': parser.ATOM, 'NUMBER': parser.NUMBER, 'DOT': parser.DOT,
 
-    'NEXT': parser.OP_NEXT, 'OP_GLOBAL': parser.OP_GLOBAL, 'OP_FUTURE': parser.OP_FUTURE,
+    'NEXT': parser.OP_NEXT, 'OP_GLOBAL': parser.OP_GLOBAL, 'OP_FUTURE': parser.OP_FUTURE, 
     'UNTIL': parser.UNTIL,
     'EQUAL': parser.EQUAL, 'NOTEQUAL': parser.NOTEQUAL, 'LT': parser.LT, 'GT': parser.GT,
     'LE': parser.LE, 'GE': parser.GE, 'TRUE': parser.TRUEEXP, 'FALSE': parser.FALSEEXP
@@ -18,7 +18,43 @@ basicTypes = {parser.ATOM, parser.NUMBER, parser.TRUEEXP, parser.FALSEEXP, parse
 booleanOp = {parser.AND, parser.OR, parser.XOR, parser.XNOR, parser.IMPLIES, parser.IFF}
 
 def check_formula(fsm, reach, spec):
-    recur = reach.intersected(spec)
+    recur = reach.intersection(spec)
+    i = 0
+    # while recur not empty
+    while not(recur.is_false()):
+        ##
+        # test
+        print("-"*10, "iterazione", i, "recur")
+        for state in fsm.pick_all_states(recur):
+            print("stati erore recur: ", state.get_str_values())
+        #
+        ##
+        preReach = pynusmv.dd.BDD.false()
+        new = fsm.pre(recur)
+        while (not(new.is_false())):
+            ##
+            # test
+            print("-"*10, "iterazione", i, "new")
+            for state in fsm.pick_all_states(new):
+                print("stati erore new: ", state.get_str_values())
+            #
+            ##
+            preReach = preReach.union(new)
+            ##
+            # test
+            print("-"*10, "iterazione", i, "preReach")
+            for state in fsm.pick_all_states(preReach):
+                print("stati preReach: ", state.get_str_values())
+            #
+            ##
+            if recur.intersection(preReach).equal(recur):
+                print(i)
+                return False
+            new = fsm.pre(new).diff(preReach)
+            i = i+1
+        recur = recur.intersection(preReach)
+    return True
+
     
     
 def get_reach(fsm):
@@ -108,12 +144,15 @@ def check_react_spec(spec, fsm):
     `spec`, that is, whether all executions of the model satisfies `spec`
     or not.
     """
+    f,g = parse_react(spec)
     if parse_react(spec) == None:
         return None
-
-    notBddSpec = spec_to_bdd(fsm,pynusmv.prop.not_(spec))
+    new_spec = pynusmv.prop.imply(f,g)
+    print(fsm,pynusmv.prop.not_(new_spec))
+    notBddSpec = spec_to_bdd(fsm,pynusmv.prop.not_(new_spec))
+    #print(notBddSpec)
     reach = get_reach(fsm)
-    check_formula(fsm, reach, notBddSpec)
+    return check_formula(fsm, reach, notBddSpec), None
 
     #return pynusmv.mc.check_explain_ltl_spec(spec)
 
@@ -128,6 +167,7 @@ pynusmv.glob.compute_model()
 fsm = pynusmv.glob.prop_database().master.bddFsm
 type_ltl = pynusmv.prop.propTypes['LTL']
 for prop in pynusmv.glob.prop_database():
+    print()
     spec = prop.expr
     print(spec)
     if prop.type != type_ltl:
